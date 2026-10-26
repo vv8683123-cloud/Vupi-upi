@@ -1120,12 +1120,12 @@ export class PaymentVerificationPipeline {
     const attributionResult = this.attributionEngine
       ? this.attributionEngine.processObservation(normalized)
       : {
-          attributed: true,
-          outcomeStatus: 'VERIFIED',
+          attributed: false,
+          outcomeStatus: 'UNRESOLVED',
           observationId: normalized.id,
           paymentSessionId: session?.id,
-          verificationLevel: 1,
-          verificationTag: 'DEFAULT'
+          verificationLevel: 0,
+          verificationTag: 'ATTRIBUTION_ENGINE_UNAVAILABLE'
         };
 
     stage6 = {

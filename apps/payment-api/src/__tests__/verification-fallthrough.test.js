@@ -277,7 +277,52 @@ describe('Verification Pipeline & Fall-Through Protection (#22)', () => {
     assert.match(tickets[0].subject, /DUPLICATE PAYMENT DETECTED/);
   });
 
-  test('Issue #12: VerificationPipeline honors processingExpiresAt during PROCESSING status', () => {
+  
+test('Attribution engine unavailable fails closed', () => {
+  const sessionRepo = new PaymentSessionRepository(testDb);
+  const accountRepo = new ReceivingAccountRepository(testDb);
+  const obsRepo = new ObservationRepository(testDb);
+  const merchantId = '00000000-0000-0000-0000-000000000001';
+
+  const recAcc = accountRepo.create({
+    merchantId,
+    upiId: `fail-${crypto.randomUUID().slice(0, 8)}@okaxis`,
+    payeeName: 'Fail Closed Test',
+    provider: 'AXIS_BANK'
+  });
+
+  const session = sessionRepo.create({
+    merchantId,
+    receivingAccountId: recAcc.id,
+    orderId: `FAIL-CLOSED-${Date.now()}`,
+    amountPaise: 50000n,
+    customerDetails: { phone: '9876543210' },
+    method: 'UPI'
+  });
+
+  sessionRepo.acquireSlotAtomic(session.id, recAcc.id, 300000);
+  sessionRepo.transitionToProcessing(session.id);
+
+  const pipeline = new PaymentVerificationPipeline({
+    db: testDb,
+    sessionRepo,
+    obsRepo
+  });
+
+  const result = pipeline.process({
+    source: 'SMS_GATEWAY',
+    receivingAccountId: recAcc.id,
+    paymentSessionId: session.id,
+    sender: 'HDFCBK',
+    rawText: 'Rs 500.00 credited to account ending 1234 on 19-Oct-26. UTR 918273645102.',
+    receivedAt: new Date()
+  });
+
+  assert.equal(result.status, 'UNRESOLVED');
+  assert.notEqual(result.status, 'VERIFIED');
+});
+
+test('Issue #12: VerificationPipeline honors processingExpiresAt during PROCESSING status', () => {
     const sessionRepo = new PaymentSessionRepository(testDb);
     const accountRepo = new ReceivingAccountRepository(testDb);
     const obsRepo = new ObservationRepository(testDb);
